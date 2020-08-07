@@ -17,6 +17,7 @@ public:
 
 	double getMeaningfulPercentage() const;
 	bool isIntervalMeaningful(uint64_t offset, uint64_t length) const;
+	bool setIntervalMeaningful(uint64_t offset, uint64_t length);
 
 	int dumpToFile(const std::string &file_path);
 

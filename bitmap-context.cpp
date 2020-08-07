@@ -158,3 +158,27 @@ bool BitmapContext::isIntervalMeaningful(uint64_t offset, uint64_t length) const
 
 	return false;
 }
+
+bool BitmapContext::setIntervalMeaningful(uint64_t offset, uint64_t length)
+{
+	uint64_t begin = offset;
+	uint64_t end = offset + length;
+
+	uint64_t start_block = begin / m_block_size;
+	uint64_t end_block = end / m_block_size;
+
+	if (end % m_block_size != 0) {
+		end_block += 1;
+	}
+
+	if (end_block / 8 >= m_bitmap.size()) {
+		INFO_MSG("request block %llu %llu is greater than that in bitmap (length %d)\n", offset, length, m_bitmap.size());
+		return false;
+	}
+
+	for (uint64_t i = start_block; i < end_block; i++) {
+		m_bitmap[i / 8] |= (1 << (i % 8));
+	}
+
+	return true;
+}
