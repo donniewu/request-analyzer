@@ -18,7 +18,8 @@ struct Request {
 
 	std::string toString() const {
 		std::stringstream ss;
-		ss << seq << " " << action << " " << offset << " " << length << " " << cached;
+		//ss << seq << " " << action << " " << offset << " " << length << " " << cached;
+		ss << seq << " " << action << " " << offset << " " << length;
 		return ss.str();
 	}
 };

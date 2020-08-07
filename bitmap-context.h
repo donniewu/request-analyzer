@@ -7,6 +7,12 @@
 class BitmapContext
 {
 public:
+	enum {
+		ALL_ZERO = 0,
+		PARTIAL = 1,
+		ALL_ONE = 2
+	};
+
 	BitmapContext();
 
 	int initialize(std::vector<char> &&m_bitmap, uint64_t block_size);
@@ -17,7 +23,8 @@ public:
 
 	double getMeaningfulPercentage() const;
 	bool isIntervalMeaningful(uint64_t offset, uint64_t length) const;
-	bool setIntervalMeaningful(uint64_t offset, uint64_t length);
+	int getIntervalType(uint64_t offset, uint64_t length) const;
+	bool setInterval(uint64_t offset, uint64_t length, bool zero);
 
 	int dumpToFile(const std::string &file_path);
 
