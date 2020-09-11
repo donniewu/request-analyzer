@@ -9,10 +9,13 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <memory>
 #include "bitmap-context.h"
 #include "parser.h"
 #include "request.h"
 #include "cache/interval-cache.h"
+#include "cache/size-cache.h"
+#include "cache/lru-cache.h"
 
 #define YELLOW "\033[1;33m"
 #define NONE "\033[m"
@@ -238,6 +241,7 @@ void analyze5(std::vector<Request> &reqs)
 	uint64_t offset_1 = container_size_GB * 4 + 1736;
 
 	std::vector<std::pair<uint64_t, uint64_t>> intervals;
+	intervals.push_back(std::make_pair(0, 3));
 	intervals.push_back(std::make_pair(200, 200));
 	intervals.push_back(std::make_pair(container_size_GB * 4 + 1736, 300));
 	intervals.push_back(std::make_pair(container_size_GB * 8 + 3143, 100));
@@ -250,8 +254,17 @@ void analyze5(std::vector<Request> &reqs)
 	IntervalFileCache* interval_cache = new IntervalFileCache;
 	interval_cache->setIntervals(intervals);
 
+	SizeCache* size_cache = new SizeCache;
+	size_cache->setThreshold(64 * 1024);
+
+	LRUCache* lru_cache = new LRUCache;
+	lru_cache->setMaxUsage(1 * 1024 * 1024 * 1024ULL);
+	lru_cache->setPrefetchLength(4 * 1024 * 1024UL);
+
 	std::vector<Cache*> caches;
 	caches.push_back(interval_cache);
+	caches.push_back(size_cache);
+	caches.push_back(lru_cache);
 
 	printf(YELLOW "Apply caches:\n" NONE);
 
@@ -280,6 +293,8 @@ void analyze5(std::vector<Request> &reqs)
 			if (hit) {
 				cs.read_hit_count += 1;
 				cs.read_hit_length += req.length;
+			} else {
+				//printf("%lu %lu not hit\n", req.offset, req.length);
 			}
 		} else {
 			cs.write_count += 1;
@@ -300,6 +315,19 @@ void analyze5(std::vector<Request> &reqs)
 
 	printf(YELLOW "Send to server stat:\n" NONE);
 	printf("%s\n", cs.toString().c_str());
+
+END:
+	if (interval_cache != nullptr) {
+		delete interval_cache;
+	}
+
+	if (size_cache != nullptr) {
+		delete size_cache;
+	}
+
+	if (lru_cache != nullptr) {
+		delete lru_cache;
+	}
 }
 
 int main()

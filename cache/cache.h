@@ -16,7 +16,7 @@ struct CacheStat {
 	int read_hit_count;
 	uint64_t read_hit_length;
 
-	uint64_t usage;
+	int64_t usage;
 
 	std::string toString();
 };

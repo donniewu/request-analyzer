@@ -29,6 +29,7 @@ std::string CacheStat::toString()
 	ss << "read_length: " << read_length << "\n";
 	ss << "* read_hit_count: " << read_hit_count << "\n";
 	ss << "read_hit_length: " << read_hit_length << "\n";
+	ss << "usage: " << usage << "\n";
 	ss << "hit rate: " << read_hit_count / (double) read_count << "\n";
 
 	return ss.str();
