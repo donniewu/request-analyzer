@@ -294,7 +294,7 @@ void analyze5(std::vector<Request> &reqs)
 				cs.read_hit_count += 1;
 				cs.read_hit_length += req.length;
 			} else {
-				//printf("%lu %lu not hit\n", req.offset, req.length);
+				printf("%lu %lu not hit\n", req.offset, req.length);
 			}
 		} else {
 			cs.write_count += 1;

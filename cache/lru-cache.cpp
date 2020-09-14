@@ -34,13 +34,12 @@ int LRUCache::read(uint64_t offset, uint64_t length)
 	m_stat.read_length += length;
 
 	if (m_intervals.size() == 0) {
-		ERR_MSG("\tnot found\n");
-		ERR_MSG("\t%12lu %12lu x\n", offset, length);
+		//ERR_MSG("\t%12lu %12lu x\n", offset, length);
 		update(offset, length);
 		return 0;
 	}
 
-	auto it = m_map.lower_bound(offset);
+	auto it = m_map.lower_bound(offset + 1);
 
 	if (it != m_map.begin()) {
 		it = std::prev(it);
@@ -49,13 +48,13 @@ int LRUCache::read(uint64_t offset, uint64_t length)
 	Interval &interval = *(it->second);
 
 	if (interval.offset > offset || interval.offset + interval.length < offset + length) {
-		ERR_MSG("\tfound but exceed\n");
-		ERR_MSG("\t%12lu %12lu x\n", offset, length);
+		//ERR_MSG("\tfound but exceed\n");
+		//ERR_MSG("\t%12lu %12lu x\n", offset, length);
 		update(offset, length);
 		return 0;
 	}
 
-	ERR_MSG("\t%12lu %12lu\n", offset, length);
+	//ERR_MSG("\t%12lu %12lu\n", offset, length);
 	m_stat.read_hit_count += 1;
 	m_stat.read_hit_length += length;
 
@@ -67,7 +66,7 @@ void LRUCache::rotate(uint64_t next_length)
 	while (m_stat.usage + next_length > m_max_usage && m_intervals.size() > 0) {
 		auto &last_interval = m_intervals.back();
 		m_stat.usage -= last_interval.length;
-		ERR_MSG("rotate %lu %lu\n", last_interval.offset, last_interval.length);
+		//ERR_MSG("rotate %lu %lu\n", last_interval.offset, last_interval.length);
 
 		m_map.erase(last_interval.offset);
 		m_intervals.pop_back();
@@ -118,6 +117,16 @@ std::string LRUCache::toString()
 
 std::string LRUCache::dump()
 {
-	return "";
+	std::stringstream ss;
+
+	ss << "==========\n";
+
+	for (auto &interval : m_intervals) {
+		ss << interval.offset << " " << interval.length << "\n";
+	}
+
+	ss << "==========\n";
+
+	return ss.str();
 }
 
