@@ -1,6 +1,5 @@
 CPPS= \
 	main.cpp \
-	bitmap-context.cpp \
 	parser.cpp \
 	cache/cache.cpp \
 	cache/interval-cache.cpp \

@@ -10,7 +10,6 @@
 #include <set>
 #include <sstream>
 #include <memory>
-#include "bitmap-context.h"
 #include "parser.h"
 #include "request.h"
 #include "cache/interval-cache.h"
@@ -24,161 +23,7 @@
 #define FIRST_BACKUP "first"
 #define SECOND_BACKUP "second"
 
-
-#define BLOCK_DEVICE_SIZE ((uint64_t)((double) 1024 * 1024 * 1024 * 1024ULL))
-
-#define DIRTY_BITMAP_BLOCK_SIZE (4 * 1024)
-
-#define CACHE_SLOT_SIZE (4 * 1024)
-#define CACHE_THRESHOLD (64 * 1024)
-
-#define PREFETCH_SIZE (4 * 1024 * 1024)
-
-void requestStat(const std::vector<Request>& requests)
-{
-	uint64_t cached_size = 0;
-
-	for (auto &req : requests) {
-		if (req.cached == true) {
-			cached_size += req.length;
-		}
-	}
-
-	printf("cached size is %llu\n", cached_size);
-}
-
-// Read before write analyze
-void analyze1(const std::vector<Request>& requests)
-{
-	for (int i = 0; i < requests.size(); i++) {
-		auto &req = requests[i];
-
-		if (req.action == 1) {
-			continue;
-		}
-
-		bool found = false;
-		Request last_req;
-
-		for (int j = req.seq - 1; j >= 0; j--) {
-			auto &lr = requests[j];
-
-			if (lr.action == 0) {
-				continue;
-			}
-
-			if (req.offset >= lr.offset && req.offset + req.length <= lr.offset + lr.length) {
-				found = true;
-				last_req = lr;
-				break;
-			}
-		}
-
-		if (found) {
-			if (last_req.cached == false) {
-				printf("read %s, last write %s\n", req.toString().c_str(), last_req.toString().c_str());
-			}
-		} else {
-			printf("read %s, not found\n", req.toString().c_str());
-		}
-	}
-}
-
-void analyze2(const std::vector<Request>& requests)
-{
-	BitmapContext dirty_bitmap;
-
-	{
-		uint64_t cache_length = (BLOCK_DEVICE_SIZE / DIRTY_BITMAP_BLOCK_SIZE) / 8;
-
-		if (((BLOCK_DEVICE_SIZE / DIRTY_BITMAP_BLOCK_SIZE) % 8) != 0) {
-			cache_length += 1;
-		}
-
-		std::vector<char> bitmap;
-		bitmap.resize(cache_length, 255);
-
-		if (dirty_bitmap.initialize(std::move(bitmap), DIRTY_BITMAP_BLOCK_SIZE) < 0) {
-			printf("Failed to initialize dirty bitmap\n");
-			return;
-		}
-	}
-
-	BitmapContext cache;
-
-	{
-		uint64_t cache_length = (BLOCK_DEVICE_SIZE / CACHE_SLOT_SIZE) / 8;
-
-		if (((BLOCK_DEVICE_SIZE / CACHE_SLOT_SIZE) % 8) != 0) {
-			cache_length += 1;
-		}
-
-		std::vector<char> bitmap;
-		bitmap.resize(cache_length, 0);
-
-		if (cache.initialize(std::move(bitmap), CACHE_SLOT_SIZE) < 0) {
-			printf("Failed to initialize cache\n");
-			return;
-		}
-	}
-
-	std::set<uint64_t> request_M;
-
-	for (int i = 0; i < requests.size(); i++) {
-		auto &req = requests[i];
-
-		if (req.action == 0) {
-			if (dirty_bitmap.getIntervalType(req.offset, req.length) == BitmapContext::ALL_ONE) {
-			} else {
-				if (cache.getIntervalType(req.offset, req.length) == BitmapContext::ALL_ONE) {
-					if (req.offset >= BLOCK_DEVICE_SIZE * 0.17 && req.offset + req.length <= BLOCK_DEVICE_SIZE * 0.19) {
-						//printf("req hit in 17~19%, %llu %llu\n",req.offset,req.length);
-					}
-				} else {
-					//printf("read %s not hit\n", req.toString().c_str());
-					request_M.insert(req.offset / PREFETCH_SIZE);
-				}
-			}
-		}
-
-		if (req.action == 1) {
-			if (req.length < (32 * 1024 * 1024)) {
-				dirty_bitmap.setInterval(req.offset, req.length, true);
-			}
-
-			std::vector<std::pair<double, double>> cache_intervals;
-
-			cache_intervals.push_back(std::make_pair(0.17, 0.19));
-			//cache_intervals.push_back(std::make_pair(0.00, 0.05));
-
-			auto hit = [&] () {
-				for (auto &i : cache_intervals) {
-					if (req.offset >= BLOCK_DEVICE_SIZE * i.first &&
-						req.offset <= BLOCK_DEVICE_SIZE * i.second &&
-						req.length <= (1 * 1024 * 1024)) {
-						return true;
-					}
-				}
-				return false;
-			};
-
-			if (hit()) {
-				cache.setInterval(req.offset, req.length, false);
-			} else {
-				if (req.length <= CACHE_THRESHOLD) {
-					cache.setInterval(req.offset, req.length, false);
-				} else if (req.length >= (32 * 1024 * 1024)) {
-					//cache.setInterval(req.offset, req.length, false);
-				} else {
-					cache.setInterval(req.offset, req.length, true);
-				}
-			}
-		}
-	}
-
-	printf("%f\n", cache.getMeaningfulPercentage());
-	printf("set size is %d\n", request_M.size());
-}
+#define BLOCK_DEVICE_SIZE ((uint64_t)((double) 150 * 1024 * 1024 * 1024ULL))
 
 #define STAT_SIZE (100 * 1024 * 1024)
 
@@ -365,7 +210,7 @@ int main()
 
 	//analyze2(reqs1);
 	//analyze2(reqs12);
-	analyze5(reqs12);
+	analyze3(reqs12);
 
     return 0;
 }
