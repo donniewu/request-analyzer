@@ -12,6 +12,7 @@
 #include <memory>
 #include "parser.h"
 #include "request.h"
+#include "extents.h"
 #include "cache/interval-cache.h"
 #include "cache/size-cache.h"
 #include "cache/lru-cache.h"
@@ -22,12 +23,116 @@
 #define KERNEL true
 #define FIRST_BACKUP "first"
 #define SECOND_BACKUP "second"
+#define LAYOUT_FILE "layout"
 
 #define BLOCK_DEVICE_SIZE ((uint64_t)((double) 150 * 1024 * 1024 * 1024ULL))
 
-#define STAT_SIZE (100 * 1024 * 1024)
+#define STAT_SIZE (1 * 1024 * 1024)
 
-void analyze3(std::vector<Request> &reqs)
+#define EFI_OFFSET (200 * 1024 * 1024)
+
+struct SeperatedRequest {
+	std::vector<Request> efi;
+	std::vector<Request> hfs;
+	std::vector<Request> apfs;
+
+	SeperatedRequest() {
+		efi.clear();
+		hfs.clear();
+		apfs.clear();
+	}
+};
+
+SeperatedRequest seperate(const Extents &extents, const Request &request)
+{
+	SeperatedRequest sr;
+
+	if (request.offset < EFI_OFFSET) {
+		if (request.offset + request.length > EFI_OFFSET) {
+			printf("request cross efi and hfs\n");
+			exit(0);
+		} else {
+			sr.efi.push_back(request);
+			return sr;
+		}
+	} else {
+		Request r;
+		r.offset = request.offset - EFI_OFFSET;
+		r.length = request.length;
+		sr.hfs.push_back(r);
+	}
+
+	uint64_t acc_length = 0;
+
+	for (auto &extent : extents) {
+		uint64_t es = extent.first;
+		uint64_t el = extent.second;
+		uint64_t ee = es + el;
+
+		SeperatedRequest sr_tmp;
+
+		for (auto it = sr.hfs.begin(); it != sr.hfs.end(); ) {
+			uint64_t rs = it->offset;
+			uint64_t rl = it->length;
+			uint64_t re = rs + rl;
+
+			if (std::max(ee, re) - std::min(es, rs) >= el + rl) {
+				//printf("no overlap\n");
+				it++;
+				continue;
+			}
+
+			{
+				Request r;
+				r.offset = acc_length + std::max(rs, es) - es;
+				r.length = std::min(re, ee) - std::max(rs, es);
+
+				sr_tmp.apfs.push_back(r);
+			}
+
+			if (rs < es) {
+				Request r;
+				r.offset = rs;
+				r.length = es - rs;
+
+				sr_tmp.hfs.push_back(r);
+			}
+
+			if (re > ee) {
+				Request r;
+				r.offset = ee;
+				r.length = re - ee;
+
+				sr_tmp.hfs.push_back(r);
+			}
+
+			it = sr.hfs.erase(it);
+		}
+
+		for (auto &r : sr_tmp.hfs) {
+			sr.hfs.push_back(r);
+		}
+
+		for (auto &r : sr_tmp.apfs) {
+			sr.apfs.push_back(r);
+		}
+
+		acc_length += el;
+	}
+
+	if (sr.apfs.size() > 0) {
+		//printf("%s => %s\n", request.toString().c_str(), sr.apfs[0].toString().c_str());
+	}
+
+	if (sr.apfs.size() > 0 && sr.hfs.size() > 0) {
+		printf("both hfs and apfs\n");
+		exit(0);
+	}
+
+	return sr;
+}
+
+void analyze3(const Extents &extents, std::vector<Request> &reqs)
 {
 	std::map<uint64_t, int> stat;
 
@@ -35,9 +140,33 @@ void analyze3(std::vector<Request> &reqs)
 		stat[i] = 0;
 	}
 
+	int efi_count = 0;
+	int hfs_count = 0;
+	int apfs_count = 0;
+
 	for (auto &req : reqs) {
-		if (req.action == 0) {
-			int part = req.offset / STAT_SIZE;
+		if (req.action == 1) {
+			continue;
+		}
+
+		SeperatedRequest sr;
+
+		if (extents.size() == 0) {
+			sr.apfs.push_back(req);
+		} else {
+			sr = seperate(extents, req);
+		}
+
+		if (sr.efi.size() > 0) {
+			efi_count += 1;
+		} else if (sr.hfs.size() > 0) {
+			hfs_count += 1;
+		} else if (sr.apfs.size() > 0) {
+			apfs_count += 1;
+		}
+
+		for (auto &r : sr.apfs) {
+			int part = r.offset / STAT_SIZE;
 			stat[part] += 1;
 		}
 	}
@@ -45,6 +174,8 @@ void analyze3(std::vector<Request> &reqs)
 	for (uint64_t i = 0; i < BLOCK_DEVICE_SIZE / STAT_SIZE; i++) {
 		printf("%d\n", stat[i]);
 	}
+
+	//printf("%d %d %d\n", efi_count, hfs_count, apfs_count);
 }
 
 void analyze4(std::vector<Request> &reqs)
@@ -175,6 +306,33 @@ END:
 	}
 }
 
+int main1()
+{
+	Extents extents;
+	extents.push_back(std::make_pair(16, 5));
+	extents.push_back(std::make_pair(5, 5));
+	extents.push_back(std::make_pair(10, 5));
+
+	Request req1;
+	req1.offset = 6;
+	req1.length = 20;
+
+	auto sr = seperate(extents, req1);
+
+	printf("hfs:\n");
+	for (auto &r : sr.hfs) {
+		printf("%s\n", r.toString().c_str());
+	}
+
+	printf("apfs:\n");
+	for (auto &r : sr.apfs) {
+		printf("%s\n", r.toString().c_str());
+	}
+
+	return 0;
+}
+
+
 int main()
 {
     std::vector<Request> reqs1;
@@ -190,6 +348,13 @@ int main()
 		printf("parsefile failed\n");
         return -1;
     }
+
+	Extents extents;
+
+	if (parseLayout(LAYOUT_FILE, extents) < 0) {
+		printf("parseLayout failed\n");
+		return -1;
+	}
 
 	int seq_offset;
 
@@ -210,7 +375,7 @@ int main()
 
 	//analyze2(reqs1);
 	//analyze2(reqs12);
-	analyze3(reqs12);
+	analyze3(extents, reqs12);
 
     return 0;
 }

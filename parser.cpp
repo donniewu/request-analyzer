@@ -9,6 +9,7 @@
 #include <map>
 #include <sstream>
 #include "request.h"
+#include "extents.h"
 
 int parseKernelFile(const std::string &file_name, std::vector<Request>& requests)
 {
@@ -121,3 +122,44 @@ int parseFile(bool kernel, const std::string &file_name, std::vector<Request>& r
 	}
 }
 
+int parseLayout(const std::string &file_name, Extents &extents)
+{
+	FILE* fp = NULL;
+    char line[300];
+    int ret = -1;
+
+    fp = fopen(file_name.c_str(), "r");
+
+    if (fp == NULL) {
+        printf("cannot open file %d\n", errno);
+        goto end;
+    }
+
+    memset(line, 0, 300);
+
+    while (fgets(line, sizeof(line), fp)) {
+        int g = 0;
+
+		uint64_t offset;
+		uint64_t length;
+
+        if ((g = sscanf(line, "%llu,%llu", &offset, &length)) != 2) {
+            printf("ERROR occur while parse string '%s', '%d'\n", line, g);
+            goto end;
+        }
+
+		extents.push_back(std::make_pair(offset * 4096, length * 4096));
+
+        memset(line, 0, 300);
+    }
+
+    ret = 0;
+
+end:
+    if (fp != NULL) {
+        fclose(fp);
+        fp = NULL;
+    }
+
+    return ret;
+}
